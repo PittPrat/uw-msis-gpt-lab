@@ -1,0 +1,37 @@
+Project Thesis: The "Inference-First" Architecture Module
+
+Submitted to: Professor Ming Fan, UW Foster School of Business
+By: Prathik Pittala, Research Assistant
+Date: December 2025
+
+1. Executive Summary
+
+The objective of this research module is to provide MSIS students with a foundational understanding of Large Language Model (LLM) architecture ("Transformer from Scratch").
+
+After analyzing the MSIS 522 curriculum and current industry requirements, I propose an "Inference-First" approach (PicoGPT) rather than a "Training-First" approach (NanoGPT).
+
+Instead of spending valuable class time debugging backpropagation gradients or GPU drivers, students will reconstruct the forward-pass architecture of GPT-2 using raw Python and NumPy. This allows us to focus 100% of the rigorous coursework on the architecture (Self-Attention, Layer Norm, Embeddings) rather than the optimization dynamics.
+
+2. Theoretical Justification
+
+The "Black Box" problem in AI education stems from high-level abstractions (like torch.nn.Transformer) hiding the underlying mathematics.
+
+By stripping away the Deep Learning frameworks (PyTorch/TensorFlow) and forcing students to implement the model in NumPy, we achieve higher academic rigor:
+
+Mathematical Transparency: Students must manually code the matrix multiplications (Q @ K.T), forcing them to engage with the equations from Vaswani et al. (2017).
+
+Architecture Isolation: By removing the complexity of training (loss functions, optimizers), we isolate the study of the structure (how the model "thinks").
+
+Immediate Feedback: Unlike training runs which take hours to converge, this inference model uses pre-trained weights (GPT-2 124M), allowing students to see coherent text generation immediately upon successful coding.
+
+3. Curriculum Alignment
+
+MSIS 522 (Prof. Leo): Covers Backpropagation, Gradient Descent, and Theory.
+
+This Module (RA Project): Covers Applied Architecture and Inference Engineering.
+
+Differentiation: We are not teaching "How to learn"; we are teaching "How to think."
+
+4. The "Prompt-to-Code" Pedagogy
+
+This module is designed to be "AI-Native." The accompanying code files are structured to work alongside AI coding assistants. Students are encouraged to paste the architectural skeleton into an LLM to generate explanations for the specific linear algebra operations, effectively using the AI to teach the AI architecture.

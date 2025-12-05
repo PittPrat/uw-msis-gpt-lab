@@ -1,0 +1,7 @@
+numpy
+requests
+tqdm
+torch
+transformers
+tokenizers
+regex
