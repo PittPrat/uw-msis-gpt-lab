@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PicoGPT Architecture Map</title>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&family=Fira+Code:wght@500&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary: #2563eb;
+            --secondary: #475569;
+            --accent: #f59e0b;
+            --bg: #f8fafc;
+            --card-bg: #ffffff;
+            --code-bg: #1e293b;
+            --code-text: #e2e8f0;
+        }
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg);
+            color: #0f172a;
+            margin: 0;
+            padding: 40px;
+            line-height: 1.6;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        header {
+            text-align: center;
+            margin-bottom: 60px;
+            border-bottom: 2px solid #e2e8f0;
+            padding-bottom: 40px;
+        }
+        h1 {
+            font-size: 3em;
+            font-weight: 800;
+            color: #1e293b;
+            margin-bottom: 10px;
+            letter-spacing: -1px;
+        }
+        .subtitle {
+            font-size: 1.2em;
+            color: #64748b;
+        }
+        .flowchart-card {
+            background: var(--card-bg);
+            border-radius: 16px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+            padding: 40px;
+            margin-bottom: 40px;
+        }
+        .section-title {
+            font-size: 1.5em;
+            font-weight: 700;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .code-pill {
+            font-family: 'Fira Code', monospace;
+            background: var(--code-bg);
+            color: var(--code-text);
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 0.9em;
+        }
+        /* Mermaid Overrides */
+        .mermaid {
+            display: flex;
+            justify-content: center;
+        }
+        /* Data Transform Cards */
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+        }
+        .data-card {
+            background: white;
+            border-left: 5px solid var(--primary);
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        }
+        .data-shape {
+            font-family: 'Fira Code', monospace;
+            color: var(--primary);
+            font-weight: bold;
+            display: block;
+            margin-bottom: 8px;
+        }
+        .legend {
+            display: flex;
+            justify-content: center;
+            gap: 20px;
+            margin-top: 20px;
+            font-size: 0.9em;
+            color: #64748b;
+        }
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <header>
+        <h1>PicoGPT Architecture Map</h1>
+        <div class="subtitle">Visualizing the <code>pico_gpt.py</code> Code Structure</div>
+    </header>
+
+    <!-- ARCHITECTURE DIAGRAM -->
+    <div class="flowchart-card">
+        <div class="section-title">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+            The Execution Flow
+        </div>
+        <div class="mermaid">
+graph TD
+    classDef input fill:#e0e7ff,stroke:#3730a3,stroke-width:2px
+    classDef norm fill:#f1f5f9,stroke:#475569,stroke-width:2px
+    classDef core fill:#fff7ed,stroke:#c2410c,stroke-width:2px
+    classDef output fill:#dcfce7,stroke:#166534,stroke-width:2px
+    classDef resid fill:#f0fdf4,stroke:#16a34a,stroke-width:2px,stroke-dasharray: 5 5
+
+    Start["Input Indices<br/>[batch, seq]"]:::input --> Emb["Embeddings<br/>wte[x] + wpe[i]<br/>Goal: To Vectors"]:::input
+    
+    Emb --> BlockStart
+    
+    subgraph TransformerBlock["Loop: Transformer Block (12x)"]
+        direction TB
+        BlockStart((" ")) --> LN1["Layer Norm 1<br/>layer_norm()<br/>Goal: Stability"]:::norm
+        
+        LN1 --> MHA["Multi-Head Attention<br/>mha()<br/>Goal: Parallel Focus"]:::core
+        
+        MHA --> Res1(("+")):::resid
+        BlockStart --> Res1
+        
+        Res1 --> LN2["Layer Norm 2<br/>layer_norm()<br/>Goal: Stability"]:::norm
+        
+        LN2 --> FFN["Feed Forward<br/>feed_forward()<br/>Goal: Thinking"]:::core
+        
+        FFN --> Res2(("+")):::resid
+        Res1 -->|Skip Connection| Res2
+    end
+    
+    Res2 --> LNF["Final Norm<br/>layer_norm()"]:::norm
+    LNF --> UnEmb["Projection<br/>x @ wte.T<br/>Goal: To Logits"]:::output
+    UnEmb --> Soft["Softmax<br/>softmax()<br/>Goal: To Probs"]:::output
+    Soft --> End("Next Token"):::output
+
+    MHA -.->|Uses| AttnFunc["Scaled Dot-Product<br/>attention()"]:::core
+    FFN -.->|Uses| ActFunc["GELU<br/>gelu()"]:::core
+    FFN -.->|Uses| LinFunc["Linear<br/>linear()"]:::core
+        </div>
+
+        <div class="legend">
+            <div class="legend-item"><div class="dot" style="background:#e0e7ff; border:1px solid #3730a3"></div>Data Prep</div>
+            <div class="legend-item"><div class="dot" style="background:#f1f5f9; border:1px solid #475569"></div>Normalization</div>
+            <div class="legend-item"><div class="dot" style="background:#fff7ed; border:1px solid #c2410c"></div>Core Intelligence</div>
+            <div class="legend-item"><div class="dot" style="background:#dcfce7; border:1px solid #166534"></div>Prediction</div>
+        </div>
+    </div>
+
+    <!-- DATA TRANSFORMATIONS -->
+    <div class="section-title">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+        Data Transformations (Tensor Shapes)
+    </div>
+    <div class="grid">
+        <div class="data-card">
+            <span class="data-shape">[ Batch, Seq_Len ]</span>
+            <h3>1. Input Tokens</h3>
+            <p>Raw integers representing words.</p>
+            <div class="code-pill">inputs = [54, 1200]</div>
+        </div>
+
+        <div class="data-card">
+            <span class="data-shape">[ Batch, Seq_Len, 768 ]</span>
+            <h3>2. Embeddings</h3>
+            <p>The "High-Dimensional" space where meanings exist. 768 is the hidden size of GPT-2 Small.</p>
+            <div class="code-pill">x = wte + wpe</div>
+        </div>
+
+        <div class="data-card">
+            <span class="data-shape">[ Batch, Heads, Seq, Seq ]</span>
+            <h3>3. Attention Matrix</h3>
+            <p>The "Relevance Map". A square grid showing how much every word attends to every other word.</p>
+            <div class="code-pill">attn = Q @ K.T</div>
+        </div>
+
+        <div class="data-card">
+            <span class="data-shape">[ Batch, Seq_Len, 50257 ]</span>
+            <h3>4. Logits</h3>
+            <p>A score for every word in the dictionary (50,257 total) predicting likelihood.</p>
+            <div class="code-pill">logits = x @ wte.T</div>
+        </div>
+    </div>
+</div>
+
+<script>
+    mermaid.initialize({
+        startOnLoad: true,
+        securityLevel: 'loose',
+        theme: 'base',
+        flowchart: {
+            curve: 'basis',
+            padding: 20,
+            htmlLabels: true
+        }
+    });
+</script>
+
+</body>
+</html>

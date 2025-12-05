@@ -110,11 +110,14 @@ PicoGPT implements the following components:
 
 - **LEARNING_GUIDE.md**: Comprehensive step-by-step guide to build PicoGPT from scratch
 - **instructions/student_builder_prompts.md**: Prompts to use with AI assistants when stuck
+- **instructions/architecture_visualization.html**: Interactive visual diagram of the GPT-2 architecture
+- **instructions/pico_gpt_architecture.md**: Code-to-concept mapping guide
 
 ### For Instructors
 
 - **instructions/instructions.md**: Prompts for instructors to help students understand linear algebra concepts
 - **instructions/strategy.txt**: Project rationale and pedagogical approach
+- **instructions/pico_gpt_architecture.md**: Visual mapping of functions to concepts
 
 ## Running Tests
 
