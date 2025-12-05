@@ -80,3 +80,4 @@ if __name__ == "__main__":
     np.savez("gpt2_weights.npz", params=params)
     print("Done! You can now run 'python pico_gpt.py'.")
 
+
