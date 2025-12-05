@@ -111,6 +111,61 @@
             height: 12px;
             border-radius: 50%;
         }
+        /* Theory Section Styles */
+        .theory-section {
+            margin-top: 60px;
+        }
+        .theory-card {
+            background: var(--card-bg);
+            border-radius: 12px;
+            padding: 30px;
+            margin-bottom: 30px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+            border-left: 4px solid var(--primary);
+        }
+        .theory-card h3 {
+            color: var(--primary);
+            margin-top: 0;
+            margin-bottom: 15px;
+            font-size: 1.3em;
+        }
+        .formula {
+            background: var(--code-bg);
+            color: var(--code-text);
+            padding: 15px;
+            border-radius: 8px;
+            font-family: 'Fira Code', monospace;
+            margin: 15px 0;
+            overflow-x: auto;
+            font-size: 0.95em;
+        }
+        .formula-inline {
+            background: #f1f5f9;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-family: 'Fira Code', monospace;
+            color: #1e293b;
+        }
+        .purpose-box {
+            background: #f0f9ff;
+            border-left: 3px solid #0ea5e9;
+            padding: 15px;
+            margin: 15px 0;
+            border-radius: 4px;
+        }
+        .purpose-box strong {
+            color: #0369a1;
+        }
+        .example-box {
+            background: #fef3c7;
+            border-left: 3px solid #f59e0b;
+            padding: 15px;
+            margin: 15px 0;
+            border-radius: 4px;
+        }
+        .example-box strong {
+            color: #92400e;
+        }
     </style>
 </head>
 <body>
@@ -206,6 +261,300 @@ graph TD
             <h3>4. Logits</h3>
             <p>A score for every word in the dictionary (50,257 total) predicting likelihood.</p>
             <div class="code-pill">logits = x @ wte.T</div>
+        </div>
+    </div>
+
+    <!-- MATHEMATICAL THEORY SECTION -->
+    <div class="theory-section">
+        <div class="section-title">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+            Mathematical Operations & Theory
+        </div>
+
+        <div class="theory-card">
+            <h3>1. Matrix Multiplication (Linear Transformation)</h3>
+            <p><strong>Operation:</strong> <span class="formula-inline">y = xW + b</span></p>
+            
+            <div class="formula">
+                Given: x ∈ ℝ^(m×n), W ∈ ℝ^(n×p), b ∈ ℝ^p<br/>
+                Result: y ∈ ℝ^(m×p)<br/><br/>
+                y[i,j] = Σ(k=1 to n) x[i,k] × W[k,j] + b[j]
+            </div>
+
+            <div class="purpose-box">
+                <strong>Purpose:</strong> This is the fundamental operation of neural networks. It transforms input vectors into output vectors by:
+                <ul>
+                    <li>Combining features through weighted sums</li>
+                    <li>Learning relationships between input and output dimensions</li>
+                    <li>Enabling the model to represent complex functions</li>
+                </ul>
+            </div>
+
+            <div class="example-box">
+                <strong>Example in PicoGPT:</strong>
+                <ul>
+                    <li><span class="formula-inline">linear(x, w, b)</span> - Projects embeddings to Q, K, V spaces</li>
+                    <li><span class="formula-inline">x @ wte.T</span> - Projects final embeddings back to vocabulary</li>
+                    <li>Each matrix multiplication learns different semantic transformations</li>
+                </ul>
+            </div>
+        </div>
+
+        <div class="theory-card">
+            <h3>2. Scaled Dot-Product Attention</h3>
+            <p><strong>Operation:</strong> The core mechanism of transformers</p>
+            
+            <div class="formula">
+                Attention(Q, K, V) = softmax(QK^T / √d_k) × V<br/><br/>
+                Where:<br/>
+                Q (Query): [n_heads, seq_len, head_dim]<br/>
+                K (Key): [n_heads, seq_len, head_dim]<br/>
+                V (Value): [n_heads, seq_len, head_dim]<br/>
+                d_k: dimension of key vectors (head_dim)
+            </div>
+
+            <div class="purpose-box">
+                <strong>Purpose:</strong>
+                <ul>
+                    <li><strong>Q @ K^T</strong>: Computes similarity scores between all token pairs. Each cell (i,j) answers "How much should token i attend to token j?"</li>
+                    <li><strong>Division by √d_k</strong>: Prevents dot products from growing too large, which would push softmax into regions with tiny gradients (vanishing gradient problem)</li>
+                    <li><strong>Softmax</strong>: Converts similarity scores into probability distribution (attention weights sum to 1)</li>
+                    <li><strong>Multiply by V</strong>: Weighted sum of values, where weights are the attention probabilities</li>
+                </ul>
+            </div>
+
+            <div class="example-box">
+                <strong>Intuition:</strong> Think of a librarian (Query) searching a database (Keys) to find relevant books (Values). The attention mechanism lets each word "ask questions" about other words and retrieve their "meanings".
+            </div>
+        </div>
+
+        <div class="theory-card">
+            <h3>3. Softmax Function</h3>
+            <p><strong>Operation:</strong> Converts logits to probabilities</p>
+            
+            <div class="formula">
+                softmax(x_i) = exp(x_i - max(x)) / Σ(j=1 to n) exp(x_j - max(x))<br/><br/>
+                Properties:<br/>
+                • Outputs sum to 1: Σ softmax(x_i) = 1<br/>
+                • All outputs are positive: softmax(x_i) > 0<br/>
+                • Preserves relative ordering: if x_i > x_j, then softmax(x_i) > softmax(x_j)
+            </div>
+
+            <div class="purpose-box">
+                <strong>Purpose:</strong>
+                <ul>
+                    <li>Converts raw scores (logits) into a probability distribution</li>
+                    <li>Makes the largest value dominate (exponential amplification)</li>
+                    <li>Enables probabilistic interpretation: "Token A has 80% probability, Token B has 15%..."</li>
+                    <li>The subtraction of max(x) prevents numerical overflow</li>
+                </ul>
+            </div>
+
+            <div class="example-box">
+                <strong>Example:</strong> If logits = [2.0, 1.0, 0.1], softmax converts them to approximately [0.66, 0.24, 0.10], making the first token 2.75× more likely than the second.
+            </div>
+        </div>
+
+        <div class="theory-card">
+            <h3>4. Layer Normalization</h3>
+            <p><strong>Operation:</strong> Normalizes activations across features</p>
+            
+            <div class="formula">
+                LayerNorm(x) = γ × (x - μ) / √(σ² + ε) + β<br/><br/>
+                Where:<br/>
+                μ = mean(x) across feature dimension<br/>
+                σ² = variance(x) across feature dimension<br/>
+                γ (gamma): learnable scale parameter<br/>
+                β (beta): learnable shift parameter<br/>
+                ε (epsilon): small constant (1e-5) to prevent division by zero
+            </div>
+
+            <div class="purpose-box">
+                <strong>Purpose:</strong>
+                <ul>
+                    <li><strong>Stability</strong>: Prevents activations from growing too large (exploding) or too small (vanishing)</li>
+                    <li><strong>Faster Training</strong>: Normalized inputs allow larger learning rates</li>
+                    <li><strong>Regularization</strong>: Acts as implicit regularization, reducing overfitting</li>
+                    <li><strong>γ and β</strong>: Allow the model to learn when to normalize and by how much</li>
+                </ul>
+            </div>
+
+            <div class="example-box">
+                <strong>Why it matters:</strong> Without normalization, after 12 transformer blocks, small numerical errors compound. Layer norm resets the scale at each layer, keeping values in a healthy range.
+            </div>
+        </div>
+
+        <div class="theory-card">
+            <h3>5. GELU Activation Function</h3>
+            <p><strong>Operation:</strong> Gaussian Error Linear Unit</p>
+            
+            <div class="formula">
+                GELU(x) = 0.5 × x × (1 + tanh(√(2/π) × (x + 0.044715 × x³)))<br/><br/>
+                Properties:<br/>
+                • Smooth and differentiable everywhere<br/>
+                • Non-linear (enables learning complex patterns)<br/>
+                • Self-gating: the function itself determines how much to "let through"
+            </div>
+
+            <div class="purpose-box">
+                <strong>Purpose:</strong>
+                <ul>
+                    <li><strong>Non-linearity</strong>: Without activation functions, multiple linear layers would collapse into a single linear layer</li>
+                    <li><strong>Smoothness</strong>: Unlike ReLU (which has a sharp corner at 0), GELU is smooth, providing better gradients</li>
+                    <li><strong>Self-gating</strong>: The function acts like a gate that opens more for larger positive values</li>
+                    <li><strong>Better for Language</strong>: GELU has been shown to work better than ReLU for language models</li>
+                </ul>
+            </div>
+
+            <div class="example-box">
+                <strong>Comparison:</strong> ReLU(x) = max(0, x) is a hard cutoff. GELU is a "soft" version that gradually transitions, allowing small negative values through with reduced magnitude.
+            </div>
+        </div>
+
+        <div class="theory-card">
+            <h3>6. Residual Connections (Skip Connections)</h3>
+            <p><strong>Operation:</strong> <span class="formula-inline">output = input + transformation(input)</span></p>
+            
+            <div class="formula">
+                In PicoGPT:<br/>
+                x = x + mha(layer_norm(x))<br/>
+                x = x + feed_forward(layer_norm(x))<br/><br/>
+                This creates an "identity path" that allows information to flow directly through layers.
+            </div>
+
+            <div class="purpose-box">
+                <strong>Purpose:</strong>
+                <ul>
+                    <li><strong>Gradient Flow</strong>: Provides a direct path for gradients to flow backward, preventing vanishing gradients in deep networks</li>
+                    <li><strong>Identity Mapping</strong>: If the transformation learns nothing useful, it can output zeros, and the input passes through unchanged</li>
+                    <li><strong>Enables Depth</strong>: Without residuals, networks struggle beyond ~5 layers. With residuals, GPT-2 uses 12 layers effectively</li>
+                    <li><strong>Incremental Learning</strong>: Each layer learns to make small improvements rather than having to learn everything from scratch</li>
+                </ul>
+            </div>
+
+            <div class="example-box">
+                <strong>Analogy:</strong> Like a highway with exit ramps. The residual connection is the highway (fast path), and the transformation is the exit ramp (local processing). Information can take either path.
+            </div>
+        </div>
+
+        <div class="theory-card">
+            <h3>7. Embeddings (Token & Positional)</h3>
+            <p><strong>Operation:</strong> Mapping discrete tokens to continuous vectors</p>
+            
+            <div class="formula">
+                Token Embedding: wte[token_id] → vector ∈ ℝ^768<br/>
+                Positional Embedding: wpe[position] → vector ∈ ℝ^768<br/>
+                Combined: x = wte[inputs] + wpe[positions]<br/><br/>
+                Result: Each token becomes a 768-dimensional vector that encodes both:
+                • Semantic meaning (from token embedding)
+                • Position in sequence (from positional embedding)
+            </div>
+
+            <div class="purpose-box">
+                <strong>Purpose:</strong>
+                <ul>
+                    <li><strong>Token Embeddings (wte)</strong>: Learn semantic relationships. Similar words get similar vectors. The model learns that "cat" and "dog" are closer than "cat" and "airplane"</li>
+                    <li><strong>Positional Embeddings (wpe)</strong>: Since transformers process all tokens in parallel (unlike RNNs), they need explicit position information. Position 0, 1, 2... get different vectors</li>
+                    <li><strong>Addition</strong>: Combining them via addition allows the model to learn both simultaneously</li>
+                    <li><strong>High Dimensionality</strong>: 768 dimensions provide enough space to encode complex relationships</li>
+                </ul>
+            </div>
+
+            <div class="example-box">
+                <strong>Example:</strong> The word "bank" at position 0 (beginning of sentence) might mean "financial institution", while "bank" at position 5 might mean "river edge". The positional embedding helps disambiguate.
+            </div>
+        </div>
+
+        <div class="theory-card">
+            <h3>8. Multi-Head Attention</h3>
+            <p><strong>Operation:</strong> Parallel attention mechanisms</p>
+            
+            <div class="formula">
+                Instead of one attention mechanism, GPT-2 uses 12 parallel "heads":<br/><br/>
+                For each head h:<br/>
+                Q_h, K_h, V_h = split(projection(x))<br/>
+                head_h = Attention(Q_h, K_h, V_h)<br/><br/>
+                Final: Concat all heads and project<br/>
+                MHA(x) = Project(Concat(head_1, ..., head_12))
+            </div>
+
+            <div class="purpose-box">
+                <strong>Purpose:</strong>
+                <ul>
+                    <li><strong>Specialization</strong>: Each head can learn to focus on different types of relationships:
+                        <ul>
+                            <li>Head 1: Grammar and syntax</li>
+                            <li>Head 2: Semantic meaning</li>
+                            <li>Head 3: Temporal relationships</li>
+                            <li>Head 4: Entity relationships</li>
+                            <li>... and so on</li>
+                        </ul>
+                    </li>
+                    <li><strong>Parallel Processing</strong>: All heads operate simultaneously, making efficient use of computation</li>
+                    <li><strong>Rich Representations</strong>: Multiple perspectives on the same input create richer feature representations</li>
+                </ul>
+            </div>
+
+            <div class="example-box">
+                <strong>Analogy:</strong> Like having 12 experts read the same document, each focusing on different aspects (grammar, meaning, style, etc.), then combining their insights.
+            </div>
+        </div>
+
+        <div class="theory-card">
+            <h3>9. Feed-Forward Network (FFN)</h3>
+            <p><strong>Operation:</strong> Two-layer MLP with expansion</p>
+            
+            <div class="formula">
+                FFN(x) = Linear(GELU(Linear(x, W₁, b₁)), W₂, b₂)<br/><br/>
+                Structure:<br/>
+                Input: [seq_len, 768]<br/>
+                → Expand: [seq_len, 3072] (4× expansion)<br/>
+                → GELU activation<br/>
+                → Contract: [seq_len, 768] (back to original)
+            </div>
+
+            <div class="purpose-box">
+                <strong>Purpose:</strong>
+                <ul>
+                    <li><strong>Expansion</strong>: The 4× expansion (768 → 3072) provides more parameters to learn complex transformations</li>
+                    <li><strong>Non-linearity</strong>: GELU activation enables learning non-linear patterns</li>
+                    <li><strong>Position-wise</strong>: Applied independently to each token position, allowing parallel processing</li>
+                    <li><strong>Processing Context</strong>: While attention gathers context from other tokens, FFN processes that context to create meaning</li>
+                </ul>
+            </div>
+
+            <div class="example-box">
+                <strong>Why expand then contract?</strong> The expansion creates a "bottleneck" architecture. The model must compress information through the bottleneck, forcing it to learn efficient representations. This is similar to autoencoders.
+            </div>
+        </div>
+
+        <div class="theory-card">
+            <h3>10. Autoregressive Generation</h3>
+            <p><strong>Operation:</strong> Iterative token prediction</p>
+            
+            <div class="formula">
+                Algorithm:<br/>
+                1. Start with prompt tokens: tokens = [t₁, t₂, ..., tₙ]<br/>
+                2. Loop for k iterations:<br/>
+                   &nbsp;&nbsp;&nbsp;a. logits = gpt2(tokens)<br/>
+                   &nbsp;&nbsp;&nbsp;b. next_token = argmax(logits[-1])<br/>
+                   &nbsp;&nbsp;&nbsp;c. tokens.append(next_token)<br/>
+                3. Return tokens
+            </div>
+
+            <div class="purpose-box">
+                <strong>Purpose:</strong>
+                <ul>
+                    <li><strong>Conditional Generation</strong>: Each new token is generated based on all previous tokens</li>
+                    <li><strong>Greedy Sampling</strong>: Always picks the most likely token (argmax). Alternative: sample from probability distribution</li>
+                    <li><strong>Autoregressive</strong>: The model's own output becomes its next input, creating a feedback loop</li>
+                    <li><strong>Context Building</strong>: As more tokens are generated, the context grows, allowing for coherent long-form generation</li>
+                </ul>
+            </div>
+
+            <div class="example-box">
+                <strong>Example:</strong> Given prompt "The cat sat", the model generates "on" (most likely), then "the" (given "The cat sat on"), then "mat" (given "The cat sat on the"), building context incrementally.
+            </div>
         </div>
     </div>
 </div>
