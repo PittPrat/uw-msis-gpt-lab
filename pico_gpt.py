@@ -206,7 +206,94 @@ def gpt2(inputs, wte, wpe, blocks, ln_f, n_head):
     # Uses the transpose of the embedding matrix.
     return x @ wte.T
 
-def generate(inputs, params, n_head, n_tokens_to_generate):
+def sample_with_temperature(logits, temperature=1.0, top_k=None, top_p=1.0):
+    """
+    Sample from logits using temperature scaling with optional Top-K and Top-P filtering.
+    
+    Args:
+        logits: Raw model output [vocab_size]
+        temperature: Controls randomness (0.1 = deterministic, 2.0 = very random)
+        top_k: If set, only sample from top K tokens (None = no limit)
+        top_p: If set, only sample from tokens with cumulative probability <= top_p (1.0 = no limit)
+    
+    Returns:
+        Sampled token ID
+    """
+    if temperature == 0.0 or temperature < 0.1:
+        # Greedy sampling (deterministic)
+        return np.argmax(logits)
+    
+    # Scale logits by temperature
+    scaled_logits = logits / temperature
+    
+    # Apply Top-K filtering if specified
+    if top_k is not None and top_k > 0:
+        # Get indices of top-k tokens
+        top_k = min(top_k, len(scaled_logits))
+        top_k_indices = np.argsort(scaled_logits)[-top_k:]
+        # Create a mask: set all other logits to -inf
+        mask = np.full_like(scaled_logits, -np.inf)
+        mask[top_k_indices] = scaled_logits[top_k_indices]
+        scaled_logits = mask
+    
+    # Convert to probabilities
+    probs = softmax(scaled_logits)
+    
+    # Apply Top-P (nucleus) filtering if specified
+    if top_p < 1.0:
+        # Sort probabilities in descending order
+        sorted_indices = np.argsort(probs)[::-1]
+        sorted_probs = probs[sorted_indices]
+        
+        # Calculate cumulative probabilities
+        cumsum_probs = np.cumsum(sorted_probs)
+        
+        # Find tokens to keep (cumulative probability <= top_p)
+        keep_mask = cumsum_probs <= top_p
+        # Always keep at least the top token
+        if not keep_mask[0]:
+            keep_mask[0] = True
+        
+        # Create new probability distribution with only kept tokens
+        new_probs = np.zeros_like(probs)
+        kept_indices = sorted_indices[keep_mask]
+        kept_probs = sorted_probs[keep_mask]
+        # Renormalize
+        kept_probs = kept_probs / kept_probs.sum()
+        new_probs[kept_indices] = kept_probs
+        probs = new_probs
+    
+    # Sample from the filtered distribution
+    return np.random.choice(len(probs), p=probs)
+
+def apply_frequency_penalty(logits, generated_tokens, penalty=0.0):
+    """
+    Apply frequency penalty to reduce repetition.
+    
+    Args:
+        logits: Raw model output [vocab_size]
+        generated_tokens: List of previously generated token IDs
+        penalty: Penalty strength (0.0 = no penalty, 2.0 = strong penalty)
+    
+    Returns:
+        Adjusted logits
+    """
+    if penalty == 0.0 or len(generated_tokens) == 0:
+        return logits
+    
+    # Count frequency of each token in generated sequence
+    token_counts = {}
+    for token_id in generated_tokens:
+        token_counts[token_id] = token_counts.get(token_id, 0) + 1
+    
+    # Apply penalty: subtract penalty * count for each token
+    adjusted_logits = logits.copy()
+    for token_id, count in token_counts.items():
+        adjusted_logits[token_id] -= penalty * count
+    
+    return adjusted_logits
+
+def generate(inputs, params, n_head, n_tokens_to_generate, temperature=1.0, frequency_penalty=0.0, top_k=50, top_p=0.9):
     """
     Autoregressive Generation Loop.
     This is the "Chat" loop.
@@ -216,6 +303,10 @@ def generate(inputs, params, n_head, n_tokens_to_generate):
         params: Model parameters dictionary
         n_head: Number of attention heads
         n_tokens_to_generate: Number of tokens to generate
+        temperature: Sampling temperature (0.1-2.0). Lower = deterministic, Higher = creative. Default: 1.0
+        frequency_penalty: Penalty for repetition (0.0-2.0). Higher = less repetition. Default: 0.0
+        top_k: Sample only from top K tokens (None = no limit). Default: 50 (recommended for quality)
+        top_p: Nucleus sampling - sample from tokens with cumulative prob <= top_p. Default: 0.9 (recommended)
     
     Returns:
         List of token IDs including original inputs and generated tokens
@@ -224,6 +315,7 @@ def generate(inputs, params, n_head, n_tokens_to_generate):
     
     # Make a copy to avoid modifying the original list
     inputs = list(inputs)
+    generated_tokens = []  # Track generated tokens for frequency penalty
     
     for _ in tqdm(range(n_tokens_to_generate), "Generating"):
         # 1. Run the model
@@ -232,11 +324,30 @@ def generate(inputs, params, n_head, n_tokens_to_generate):
         # 2. Get the last token's prediction
         next_token_logits = logits[-1]
         
-        # 3. Greedy Sampling (Pick the most likely next word)
-        next_token_id = np.argmax(next_token_logits)
+        # 3. Apply frequency penalty if enabled
+        if frequency_penalty > 0.0:
+            next_token_logits = apply_frequency_penalty(
+                next_token_logits, 
+                generated_tokens, 
+                penalty=frequency_penalty
+            )
         
-        # 4. Append to input and repeat
+        # 4. Sample with temperature and filtering
+        if temperature == 1.0 and top_k is None and top_p >= 1.0:
+            # Pure greedy sampling (original behavior)
+            next_token_id = np.argmax(next_token_logits)
+        else:
+            # Temperature sampling with Top-K/Top-P for better quality
+            next_token_id = sample_with_temperature(
+                next_token_logits, 
+                temperature=temperature,
+                top_k=top_k,
+                top_p=top_p
+            )
+        
+        # 5. Append to input and repeat
         inputs.append(int(next_token_id))
+        generated_tokens.append(int(next_token_id))
         
     return inputs
 
@@ -268,7 +379,17 @@ if __name__ == "__main__":
     
     # 4. Generate
     # GPT-2 Small has 12 heads
-    output_ids = generate(input_ids, params, n_head=12, n_tokens_to_generate=20)
+    # Using quality defaults: top_k=50, top_p=0.9 for better output quality
+    output_ids = generate(
+        input_ids, 
+        params, 
+        n_head=12, 
+        n_tokens_to_generate=20,
+        temperature=0.8,  # Slightly lower for more focused output
+        top_k=50,         # Sample from top 50 tokens
+        top_p=0.9,        # Nucleus sampling
+        frequency_penalty=0.3  # Reduce repetition
+    )
     
     # 5. Decode
     output_text = tokenizer.decode(output_ids)

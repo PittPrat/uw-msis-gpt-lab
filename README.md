@@ -1,10 +1,10 @@
 # PicoGPT: A NumPy Implementation of GPT-2
 
-A minimal, educational implementation of GPT-2 using only NumPy and raw linear algebra. This project is designed for MSIS students to understand the Transformer architecture from the ground up.
+A minimal, educational implementation of GPT-2 using only NumPy and raw linear algebra. This project helps you understand the Transformer architecture from the ground up.
 
 ## Overview
 
-PicoGPT implements the GPT-2 architecture (124M parameters) using only NumPy, focusing on the **forward pass** (inference) rather than training. This "Inference-First" approach allows students to:
+PicoGPT implements the GPT-2 architecture (124M parameters) using only NumPy, focusing on the **forward pass** (inference) rather than training. This "Inference-First" approach allows you to:
 
 - Understand the mathematical foundations of Transformers
 - See how attention mechanisms work at the matrix level
@@ -21,33 +21,39 @@ uw-msis-gpt-lab/
 ├── requirements.txt          # Python dependencies
 ├── README.md                 # This file
 ├── instructions/             # Educational materials
-│   ├── instructions.md       # Instructor prompts for teaching
-│   ├── student_builder_prompts.md  # Prompts for students
-│   ├── strategy.txt          # Project thesis and rationale
+│   ├── student_builder_prompts.md  # Prompts for building with AI assistants
+│   ├── architecture_visualization.html  # Interactive architecture diagram
+│   ├── pico_gpt_architecture.md  # Code-to-concept mapping guide
 │   └── pico_gpt.py          # Original file (reference)
 └── tests/                    # Unit tests
     └── test_pico_gpt.py     # Test suite
 ```
 
-## Quick Start
+## Quick Start - Run Locally
 
-### 1. Install Dependencies
+Follow these simple steps to run PicoGPT on your local machine:
+
+### Step 1: Install Python Dependencies
 
 ```bash
 pip install -r requirements.txt
 ```
 
-### 2. Download GPT-2 Weights
+**Note**: Make sure you have Python 3.7 or higher installed.
 
-Run this script **once** to download and convert GPT-2 weights:
+### Step 2: Download GPT-2 Weights (One-time Setup)
+
+Run this command **once** to download and convert the pre-trained GPT-2 weights:
 
 ```bash
 python setup_weights.py
 ```
 
-This will create `gpt2_weights.npz` (~500MB) containing the pre-trained weights in NumPy format.
+This will download ~500MB of weights and save them as `gpt2_weights.npz` in the project directory.
 
-### 3. Run the Model
+### Step 3: Run the Model
+
+**Option A: Command Line Interface**
 
 ```bash
 python pico_gpt.py
@@ -55,29 +61,42 @@ python pico_gpt.py
 
 This will generate text from the default prompt: "Alan Turing theorized that computers would one day become"
 
-### 4. Customize the Prompt
-
-Edit `pico_gpt.py` and modify the `prompt` variable in the `__main__` section:
+To use a custom prompt, edit `pico_gpt.py` and change the `prompt` variable around line 374:
 
 ```python
 prompt = "Your custom prompt here"
 ```
 
-### 5. (Optional) Run the Web Interface
+**Option B: Web Interface (Recommended)**
 
-For a more interactive experience, use the Streamlit web UI:
+For an interactive experience with a user-friendly interface:
 
 ```bash
 streamlit run web_ui.py
 ```
 
-This will open a web browser with a user-friendly interface where you can:
-- Enter custom prompts
-- Adjust the number of tokens to generate
-- See real-time generation progress
-- View the top 5 predictions for each token
+This will:
+- Open a web browser automatically (usually at `http://localhost:8501`)
+- Allow you to enter custom prompts directly in the UI
+- Let you adjust generation parameters (temperature, tokens, etc.)
+- Show real-time generation progress
 
 **Note**: The web UI requires Streamlit (already included in requirements.txt).
+
+### What You Can Control in the Web UI
+
+- **Prompt**: Enter any text to generate from
+- **Tokens to Generate**: Number of tokens to generate (1-50)
+- **Temperature** (0.1-2.0): Controls randomness - lower = more focused, higher = more creative
+- **Top-K**: Number of top tokens to consider for sampling
+- **Top-P**: Nucleus sampling threshold
+- **Frequency Penalty** (0.0-2.0): Reduces repetition by penalizing recently used tokens
+
+### Troubleshooting
+
+- **"Weights not found" error**: Make sure you ran `python setup_weights.py` first
+- **Import errors**: Ensure all dependencies are installed with `pip install -r requirements.txt`
+- **Port already in use** (web UI): Streamlit will try a different port automatically, or you can specify one with `streamlit run web_ui.py --server.port 8502`
 
 ## Architecture Overview
 
@@ -104,20 +123,14 @@ PicoGPT implements the following components:
 - `gpt2(...)`: Full GPT-2 model forward pass
 - `generate(...)`: Autoregressive text generation loop
 
-## Educational Resources
+## Building from Scratch
 
-### For Students
+If you want to build PicoGPT yourself and understand every component, check out these resources:
 
 - **LEARNING_GUIDE.md**: Comprehensive step-by-step guide to build PicoGPT from scratch
-- **instructions/student_builder_prompts.md**: Prompts to use with AI assistants when stuck
+- **instructions/student_builder_prompts.md**: Prompts to use with AI assistants when you get stuck
 - **instructions/architecture_visualization.html**: Interactive visual diagram of the GPT-2 architecture
-- **instructions/pico_gpt_architecture.md**: Code-to-concept mapping guide
-
-### For Instructors
-
-- **instructions/instructions.md**: Prompts for instructors to help students understand linear algebra concepts
-- **instructions/strategy.txt**: Project rationale and pedagogical approach
-- **instructions/pico_gpt_architecture.md**: Visual mapping of functions to concepts
+- **instructions/pico_gpt_architecture.md**: Code-to-concept mapping guide that explains how each function maps to Transformer concepts
 
 ## Running Tests
 

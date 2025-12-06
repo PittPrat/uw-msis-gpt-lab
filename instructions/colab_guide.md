@@ -1,4 +1,4 @@
-# Instructor Guide: Running PicoGPT in Google Colab
+# Guide: Running PicoGPT in Google Colab
 
 Since Colab runs in the cloud, we need a special "Tunnel" to view the Streamlit UI.
 Below are the 4 Code Cells you need to put in your Colab Notebook.
@@ -83,7 +83,7 @@ print("✅ Setup Complete! Weights saved to gpt2_weights.npz")
 
 ---
 
-## Cell 2: The Student Lab (The Work Area)
+## Cell 2: The Implementation (The Work Area)
 
 **Crucial Step**: We use `%%writefile` to save this cell as a Python file so the UI can import it.
 
@@ -267,15 +267,116 @@ def gpt2(inputs, wte, wpe, blocks, ln_f, n_head):
     # Uses the transpose of the embedding matrix.
     return x @ wte.T
 
-def generate(inputs, params, n_head, n_tokens_to_generate):
+def sample_with_temperature(logits, temperature=1.0, top_k=None, top_p=1.0):
+    """
+    Sample from logits using temperature scaling with optional Top-K and Top-P filtering.
+    
+    Args:
+        logits: Raw model output [vocab_size]
+        temperature: Controls randomness (0.1 = deterministic, 2.0 = very random)
+        top_k: If set, only sample from top K tokens (None = no limit)
+        top_p: If set, only sample from tokens with cumulative probability <= top_p (1.0 = no limit)
+    
+    Returns:
+        Sampled token ID
+    """
+    if temperature == 0.0 or temperature < 0.1:
+        # Greedy sampling (deterministic)
+        return np.argmax(logits)
+    
+    # Scale logits by temperature
+    scaled_logits = logits / temperature
+    
+    # Apply Top-K filtering if specified
+    if top_k is not None and top_k > 0:
+        # Get indices of top-k tokens
+        top_k = min(top_k, len(scaled_logits))
+        top_k_indices = np.argsort(scaled_logits)[-top_k:]
+        # Create a mask: set all other logits to -inf
+        mask = np.full_like(scaled_logits, -np.inf)
+        mask[top_k_indices] = scaled_logits[top_k_indices]
+        scaled_logits = mask
+    
+    # Convert to probabilities
+    probs = softmax(scaled_logits)
+    
+    # Apply Top-P (nucleus) filtering if specified
+    if top_p < 1.0:
+        # Sort probabilities in descending order
+        sorted_indices = np.argsort(probs)[::-1]
+        sorted_probs = probs[sorted_indices]
+        
+        # Calculate cumulative probabilities
+        cumsum_probs = np.cumsum(sorted_probs)
+        
+        # Find tokens to keep (cumulative probability <= top_p)
+        keep_mask = cumsum_probs <= top_p
+        # Always keep at least the top token
+        if not keep_mask[0]:
+            keep_mask[0] = True
+        
+        # Create new probability distribution with only kept tokens
+        new_probs = np.zeros_like(probs)
+        kept_indices = sorted_indices[keep_mask]
+        kept_probs = sorted_probs[keep_mask]
+        # Renormalize
+        kept_probs = kept_probs / kept_probs.sum()
+        new_probs[kept_indices] = kept_probs
+        probs = new_probs
+    
+    # Sample from the filtered distribution
+    return np.random.choice(len(probs), p=probs)
+
+def apply_frequency_penalty(logits, generated_tokens, penalty=0.0):
+    """
+    Apply frequency penalty to reduce repetition.
+    
+    Args:
+        logits: Raw model output [vocab_size]
+        generated_tokens: List of previously generated token IDs
+        penalty: Penalty strength (0.0 = no penalty, 2.0 = strong penalty)
+    
+    Returns:
+        Adjusted logits
+    """
+    if penalty == 0.0 or len(generated_tokens) == 0:
+        return logits
+    
+    # Count frequency of each token in generated sequence
+    token_counts = {}
+    for token_id in generated_tokens:
+        token_counts[token_id] = token_counts.get(token_id, 0) + 1
+    
+    # Apply penalty: subtract penalty * count for each token
+    adjusted_logits = logits.copy()
+    for token_id, count in token_counts.items():
+        adjusted_logits[token_id] -= penalty * count
+    
+    return adjusted_logits
+
+def generate(inputs, params, n_head, n_tokens_to_generate, temperature=1.0, frequency_penalty=0.0, top_k=50, top_p=0.9):
     """
     Autoregressive Generation Loop.
     This is the "Chat" loop.
+    
+    Args:
+        inputs: List of token IDs (will be modified in place)
+        params: Model parameters dictionary
+        n_head: Number of attention heads
+        n_tokens_to_generate: Number of tokens to generate
+        temperature: Sampling temperature (0.1-2.0). Lower = deterministic, Higher = creative. Default: 1.0
+        frequency_penalty: Penalty for repetition (0.0-2.0). Higher = less repetition. Default: 0.0
+        top_k: Sample only from top K tokens (None = no limit). Default: 50 (recommended for quality)
+        top_p: Nucleus sampling - sample from tokens with cumulative prob <= top_p. Default: 0.9 (recommended)
+    
+    Returns:
+        List of token IDs including original inputs and generated tokens
     """
     from tqdm import tqdm
     
     # Make a copy to avoid modifying the original list
     inputs = list(inputs)
+    generated_tokens = []  # Track generated tokens for frequency penalty
     
     for _ in tqdm(range(n_tokens_to_generate), "Generating"):
         # 1. Run the model
@@ -284,11 +385,30 @@ def generate(inputs, params, n_head, n_tokens_to_generate):
         # 2. Get the last token's prediction
         next_token_logits = logits[-1]
         
-        # 3. Greedy Sampling (Pick the most likely next word)
-        next_token_id = np.argmax(next_token_logits)
+        # 3. Apply frequency penalty if enabled
+        if frequency_penalty > 0.0:
+            next_token_logits = apply_frequency_penalty(
+                next_token_logits, 
+                generated_tokens, 
+                penalty=frequency_penalty
+            )
         
-        # 4. Append to input and repeat
+        # 4. Sample with temperature and filtering
+        if temperature == 1.0 and top_k is None and top_p >= 1.0:
+            # Pure greedy sampling (original behavior)
+            next_token_id = np.argmax(next_token_logits)
+        else:
+            # Temperature sampling with Top-K/Top-P for better quality
+            next_token_id = sample_with_temperature(
+                next_token_logits, 
+                temperature=temperature,
+                top_k=top_k,
+                top_p=top_p
+            )
+        
+        # 5. Append to input and repeat
         inputs.append(int(next_token_id))
+        generated_tokens.append(int(next_token_id))
         
     return inputs
 ```
@@ -327,6 +447,67 @@ There is no PyTorch 'magic' happening behind the scenes during inference—just 
 with st.sidebar:
     st.header("Model Controls")
     n_tokens = st.slider("Tokens to Generate", min_value=1, max_value=50, value=20)
+    
+    st.divider()
+    
+    st.subheader("Sampling Parameters")
+    
+    # Quality presets
+    quality_mode = st.selectbox(
+        "Quality Mode",
+        ["High Quality (Recommended)", "Balanced", "Creative", "Custom"],
+        help="Presets optimize Top-K and Top-P for best results"
+    )
+    
+    # Set defaults based on mode
+    if quality_mode == "High Quality (Recommended)":
+        default_temp, default_top_k, default_top_p, default_freq = 0.8, 50, 0.9, 0.3
+    elif quality_mode == "Balanced":
+        default_temp, default_top_k, default_top_p, default_freq = 1.0, 40, 0.95, 0.2
+    elif quality_mode == "Creative":
+        default_temp, default_top_k, default_top_p, default_freq = 1.2, 30, 0.85, 0.4
+    else:  # Custom
+        default_temp, default_top_k, default_top_p, default_freq = 1.0, 50, 0.9, 0.0
+    
+    temperature = st.slider(
+        "Temperature", 
+        min_value=0.1, 
+        max_value=2.0, 
+        value=default_temp, 
+        step=0.1,
+        help="Controls randomness: Lower = more deterministic, Higher = more creative"
+    )
+    
+    top_k = st.slider(
+        "Top-K", 
+        min_value=1, 
+        max_value=100, 
+        value=default_top_k, 
+        step=1,
+        help="Sample only from top K most likely tokens. Higher = more diverse, Lower = more focused. Recommended: 40-50"
+    )
+    
+    top_p = st.slider(
+        "Top-P (Nucleus)", 
+        min_value=0.1, 
+        max_value=1.0, 
+        value=default_top_p, 
+        step=0.05,
+        help="Sample from tokens with cumulative probability ≤ P. Higher = more diverse. Recommended: 0.9"
+    )
+    
+    frequency_penalty = st.slider(
+        "Frequency Penalty", 
+        min_value=0.0, 
+        max_value=2.0, 
+        value=default_freq, 
+        step=0.1,
+        help="Penalizes repeated tokens: Higher = less repetition. Recommended: 0.2-0.4"
+    )
+    
+    st.caption("💡 **Tip**: Top-K and Top-P work together to improve quality by filtering out low-probability tokens.")
+    
+    st.divider()
     st.info("Note: Since this runs on CPU with raw NumPy, generation might be slow (approx 1 token/sec). This is expected!")
 
 # 1. Load Resources (Cached so it doesn't reload on every click)
@@ -348,8 +529,12 @@ if weights_exist:
     with st.spinner("Loading Weights & Tokenizer..."):
         params, tokenizer = load_resources()
 else:
-    st.error("⚠️ Weights file not found! Please run Cell 1 first.")
+    st.error("⚠️ Weights file not found! Please run `python setup_weights.py` first.")
     params, tokenizer = None, None
+
+# Use sampling functions from pico_gpt module
+sample_with_temperature = model.sample_with_temperature
+apply_frequency_penalty = model.apply_frequency_penalty
 
 # 2. User Input
 prompt = st.text_area("Enter your prompt:", value="Alan Turing theorized that computers would one day become")
@@ -368,12 +553,21 @@ if st.button("Generate Text", type="primary"):
     # We'll use a modified generation loop here to update the UI in real-time
     # Copying the logic from pico_gpt.generate but adding UI updates
     current_ids = list(input_ids)
+    generated_tokens = []  # Track generated tokens for frequency penalty
     
     # Display initial prompt
     output_text = prompt
     output_container.markdown(f"**Output:**\n\n{output_text}")
     
     progress_bar = st.progress(0)
+    
+    # Display current settings
+    with st.expander("⚙️ Generation Settings", expanded=False):
+        st.write(f"**Mode:** {quality_mode}")
+        st.write(f"**Temperature:** {temperature} {'(Deterministic)' if temperature < 0.5 else '(Creative)' if temperature > 1.0 else '(Balanced)'}")
+        st.write(f"**Top-K:** {top_k} {'(All tokens)' if top_k >= 50257 else f'(Top {top_k} tokens)'}")
+        st.write(f"**Top-P:** {top_p} {'(All tokens)' if top_p >= 1.0 else f'(Nucleus sampling)'}")
+        st.write(f"**Frequency Penalty:** {frequency_penalty} {'(No penalty)' if frequency_penalty == 0.0 else '(Reducing repetition)'}")
     
     for i in range(n_tokens):
         # Update progress
@@ -382,10 +576,29 @@ if st.button("Generate Text", type="primary"):
         # Run model (Imported from pico_gpt)
         logits = model.gpt2(current_ids, **params, n_head=12)
         next_token_logits = logits[-1]
-        next_token_id = np.argmax(next_token_logits)
+        
+        # Apply frequency penalty
+        if frequency_penalty > 0.0:
+            next_token_logits = apply_frequency_penalty(
+                next_token_logits, 
+                generated_tokens, 
+                penalty=frequency_penalty
+            )
+        
+        # Sample with temperature, Top-K, and Top-P for better quality
+        # Only apply top_k if it's less than vocabulary size
+        effective_top_k = top_k if top_k < len(next_token_logits) else None
+        
+        next_token_id = sample_with_temperature(
+            next_token_logits, 
+            temperature=temperature,
+            top_k=effective_top_k,
+            top_p=top_p
+        )
         
         # Append
         current_ids.append(int(next_token_id))
+        generated_tokens.append(int(next_token_id))
         
         # Decode and update UI
         new_word = tokenizer.decode([next_token_id])
@@ -397,7 +610,9 @@ if st.button("Generate Text", type="primary"):
     # Analysis Section (Optional educational add-on)
     with st.expander("See Under the Hood (Last Step Logits)"):
         # Show the top 5 candidates for the very last token generated
-        probs = model.softmax(next_token_logits)
+        # Use the original logits before temperature/frequency penalty for display
+        final_logits = model.gpt2(current_ids, **params, n_head=12)
+        probs = model.softmax(final_logits[-1] / temperature if temperature > 0 else final_logits[-1])
         top_k_indices = np.argsort(probs)[-5:][::-1]
         
         st.write("Top 5 Predictions for the last word:")
@@ -411,7 +626,7 @@ if st.button("Generate Text", type="primary"):
 
 ## Cell 4: The Magic Launch (Tunneling)
 
-This runs the app and gives the student a clickable URL.
+This runs the app and gives you a clickable URL.
 
 **Option 1: Using localtunnel (Recommended)**
 
@@ -465,7 +680,7 @@ print(f"🌐 Your app is live at: {public_url}")
 
 ---
 
-## 🛑 Important Notes for Students
+## 🛑 Important Notes
 
 ### When Using localtunnel:
 
@@ -506,13 +721,13 @@ print(f"🌐 Your app is live at: {public_url}")
 
 **Cell Order:**
 1. Cell 1: Install & Setup (one-time)
-2. Cell 2: Student Lab Code (`pico_gpt.py`)
+2. Cell 2: Implementation Code (`pico_gpt.py`)
 3. Cell 3: UI Code (`web_ui.py`)
 4. Cell 4: Launch & Tunnel
 
 **Files Created:**
 - `gpt2_weights.npz` (475MB) - Model weights
-- `pico_gpt.py` - Student implementation
+- `pico_gpt.py` - PicoGPT implementation
 - `web_ui.py` - Streamlit interface
 
 **Expected Runtime:**
